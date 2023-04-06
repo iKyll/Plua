@@ -53,19 +53,18 @@ class Parens:
 Program = List[Union[Token, Op, Parens]]
 
 def simulate(program: Program):
-    for ip, op in enumerate(program):
-        if op.typ in OpType:
+    for op in range(len(program)):
+        token = program.pop(0)
+        if token.typ in OpType:
             assert len(OpType) == 4, "Exhaustive handling of ops in simulate()"
-            if op.typ == OpType.PRINT:
-                value = op.value
+            if token.typ == OpType.PRINT:
+                value = token.value
                 if isinstance(value, str):
                     print(value.encode('latin-1', 'backslashreplace').decode('unicode-escape'))
                 else:
                     print(value)
-                program.pop(0)
                 continue
-            elif op.typ == OpType.PLUS:
-                token = program.pop(0)
+            elif token.typ == OpType.PLUS:
                 arg1 = token.value[0]
                 arg2 = token.value[1]
                 if arg1.typ != arg2.typ:
@@ -76,9 +75,9 @@ def simulate(program: Program):
                     exit(1)
                 new_value = arg1.value + arg2.value
                 program.append(Token(arg1.typ, arg2.loc, new_value))
-            elif op.typ == OpType.LPAREN:
+            elif token.typ == OpType.LPAREN:
                 assert False, "not implemented"
-            elif op.typ == OpType.RPAREN:
+            elif token.typ == OpType.RPAREN:
                 assert False, "not implemented"
 
     if len(program) != 0:
