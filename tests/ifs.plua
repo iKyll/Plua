@@ -1,0 +1,4 @@
+if {
+  0 > 10 -> ( print "O is greater than 10" )
+  else -> ( print "0 is not greater than 10" )
+}
