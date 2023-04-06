@@ -56,12 +56,13 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
             typ = KEYWORDS_BY_NAME[token.value]
             assert len(OpType) == 1, "Exhaustive handling of ops in parse_token_as_op()"
             if typ == OpType.PRINT:
-                if len(tokens) == 0: 
+                if len(tokens[ip:]) == 1: 
                     print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
                     exit(1)
-                arg = tokens.pop()
-                if arg.typ != TokenType.STR and arg.typ != TokenType.INT:
-                    print(f"{arg.loc}: ERROR: expected string or number but found a keyword ({arg.typ})")
+                # TODO: find a way to change this pop because it's quite slow 
+                arg = tokens.pop(ip+1)
+                if (arg.typ != TokenType.STR) and (arg.typ != TokenType.INT):
+                    print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string or number but found `{arg.typ}`")
                     exit(1)
                 tokens[ip] = Op(OpType.PRINT, token.loc, arg.value)
     return tokens
