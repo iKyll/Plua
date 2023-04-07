@@ -1,5 +1,5 @@
-if {
+if 
   0 > 10 -> ( print "O is greater than 10\n" )
   5 > 10 -> ( print "5 is greater than 10\n" )
   else   -> ( print "0 is not greater than 10\n" )
-}
+end
