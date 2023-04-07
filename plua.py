@@ -62,9 +62,10 @@ def simulate(program: Program):
     if len(program) == 0:
         print("ERROR: simulating empty code")
         exit(1)
-
+    
+    ip = 0
     for op in range(len(program)):
-        token = program.pop(0)
+        token = program[ip]
         if token.typ in OpType:
             assert len(OpType) == 4, "Exhaustive handling of ops in simulate()"
             if token.typ == OpType.PRINT:
@@ -72,6 +73,7 @@ def simulate(program: Program):
                 if isinstance(value, Parens):
                     value = simulate(value)
                     if len(value) > 1:
+                        print(value)
                         print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for print operator")
                         exit(1)
                     value = value[0].value
@@ -79,10 +81,14 @@ def simulate(program: Program):
                     print(value.encode('latin-1', 'backslashreplace').decode('unicode-escape'))
                 else:
                     print(value)
+                program.pop(ip)
                 continue
             elif token.typ == OpType.PLUS:
-                arg1 = token.value[0]
-                arg2 = token.value[1]
+                arg1 = program.pop(ip-1)
+                _    = program.pop(ip-1)
+                arg2 = program.pop(ip-1)
+                if arg2 == token: 
+                    assert False, "ERROR?"
                 if arg1.typ != arg2.typ:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `+` operator can only add two arguments of the same type but found `{arg1.typ}` and `{arg2.typ}`")
                     exit(1)
@@ -90,8 +96,11 @@ def simulate(program: Program):
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `+` operator can only add strings or numbers.")
                     exit(1)
                 new_value = arg1.value + arg2.value
-                program.append(Token(arg1.typ, arg2.loc, new_value))
-            
+    
+                ip -= 1
+                program.insert(ip-2, Token(arg1.typ, arg2.loc, new_value))
+        elif token.typ in TokenType:
+            ip += 1 
 
     if len(program) != 0:
         if in_parens: return program
@@ -158,7 +167,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 if len(tokens[ip:]) == 1:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
                     exit(1)
-                tokens[ip-1] = Op(OpType.PLUS, token.loc, [tokens.pop(ip-1), tokens.pop(ip)])
+                tokens[ip] = Op(OpType.PLUS, token.loc, None)
     return tokens
 
 def find_token_type(value: str):
