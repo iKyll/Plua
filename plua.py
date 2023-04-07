@@ -10,21 +10,23 @@ class OpType(Enum):
     LPAREN=auto()
     RPAREN=auto()
     PLUS=auto()
+    MUL=auto()
     #LBRACKET=auto()
     #RBRACKET=auto()
 
 SEPARATORS = ['(', ')']
-KEYWORDS_SIGNS = ['+']
+KEYWORDS_SIGNS = ['+', '*']
 KEYWORDS = [ str(typ).split('.')[1].lower() for typ in OpType]
 KEYWORDS_BY_NAME = {
         "print": OpType.PRINT,
         "(": OpType.LPAREN,
         ")": OpType.RPAREN,
-        "+": OpType.PLUS
+        "+": OpType.PLUS,
+        "*": OpType.MUL
     }
 assert len(KEYWORDS_BY_NAME) == len(OpType), "Exhaustive handling of ops type in KEYWORDS_BY_NAME"
 assert len(KEYWORDS_SIGNS) == len(OpType) - 3, "Exhaustive handling of keywords signs"
-assert len(SEPARATORS) == len(OpType) - 2, "Exhaustive handling of SEPARATORS"
+assert len(SEPARATORS) == len(OpType) - 3, "Exhaustive handling of SEPARATORS"
 
 @dataclass
 class Op:
@@ -55,25 +57,20 @@ Program = List[Union[Token, Op, Parens]]
 
 def simulate(program: Program):
     in_parens = False
-    if isinstance(program, Parens): 
+    if isinstance(program, Parens):
         program = program.ops
         in_parens = True
-
-    if len(program) == 0:
-        print("ERROR: simulating empty code")
-        exit(1)
     
     ip = 0
     for op in range(len(program)):
         token = program[ip]
         if token.typ in OpType:
-            assert len(OpType) == 4, "Exhaustive handling of ops in simulate()"
+            assert len(OpType) == 5, "Exhaustive handling of ops in simulate()"
             if token.typ == OpType.PRINT:
                 value = token.value
                 if isinstance(value, Parens):
                     value = simulate(value)
                     if len(value) > 1:
-                        print(value)
                         print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for print operator")
                         exit(1)
                     value = value[0].value
@@ -98,7 +95,23 @@ def simulate(program: Program):
                 new_value = arg1.value + arg2.value
     
                 ip -= 1
-                program.insert(ip-2, Token(arg1.typ, arg2.loc, new_value))
+                program.insert(ip-3, Token(arg1.typ, arg2.loc, new_value))
+            elif token.typ == OpType.MUL:
+                arg1 = program.pop(ip-1)
+                _    = program.pop(ip-1)
+                arg2 = program.pop(ip-1)
+                if arg2 == token: 
+                    assert False, "ERROR?"
+                if arg1.typ != arg2.typ:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `*` operator can only multiply two arguments of the same type but found `{arg1.typ}` and `{arg2.typ}`")
+                    exit(1)
+                if arg1.typ != TokenType.INT:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `*` operator can only multiply numbers.")
+                    exit(1)
+                new_value = arg1.value * arg2.value
+    
+                ip -= 1
+                program.insert(ip-3, Token(arg1.typ, arg2.loc, new_value))
         elif token.typ in TokenType:
             ip += 1 
 
@@ -123,52 +136,75 @@ def find_last_separator(program: Program) -> int:
         elif op.typ == TokenType.RPAREN:
             needed -= 1
             if needed == 0:
-                return ip
+                return ip + 1 
         ip += 1
     # Find a way to get token's loc
     print("ERROR: parentheses not closed, missing: ", needed)
     exit(1)
 
-# This function checks for all tokens if it's a KEYWORD, if it is a keyword it changes that token into an op
 def parse_token_as_op(tokens: List[Token]) -> Program:
-    for ip, token in enumerate(tokens):
-        if token.value in SEPARATORS:
-            loc = token.loc
-            value = parse_token_as_op(tokens[ip+1:-1])
-            return Parens(loc, value)
+    ip = 0
+    end_tokens = []
+    for op in range(len(tokens)):
+        if len(tokens) == 0: return end_tokens
+        token = tokens[ip]
+        for separator in SEPARATORS:
+            if token.value == separator:
+                loc = token.loc
+                value = parse_token_as_op(tokens[ip+1:-1])
+                return Parens(loc, value)
         if token.value in KEYWORDS or token.value in KEYWORDS_SIGNS:
             typ = KEYWORDS_BY_NAME[token.value]
-            assert len(OpType) == 4, "Exhaustive handling of ops in parse_token_as_op()"
+            assert len(OpType) == 5, "Exhaustive handling of ops in parse_token_as_op()"
             if typ == OpType.PRINT:
-                if len(tokens[ip:]) == 1: 
+                if len(tokens[ip:]) == 1:
                     print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
                     exit(1)
-                # TODO: find a way to change this pop because it's quite slow 
+                # TODO: find a way to change this pop because it's quite slow
                 arg = tokens[ip+1]
+                closing_index = 0
                 if arg.typ == TokenType.LPAREN:
                     closing_index = find_last_separator(tokens[ip+1:])
-                    arg = parse_token_as_op(tokens[ip+1:closing_index+2])
-                    for i in range(closing_index+1):
-                        _ = tokens.pop(0)
-                else:
-                    _ = tokens.pop(ip+1)
+                    arg = parse_token_as_op(tokens[ip+1:closing_index+1])
+                    if ip == 0:
+                        for i in range(closing_index+1): 
+                            tokens.pop(0)
+                    else:
+                        ip -= 1
+                        for i in range(closing_index+1):
+                            tokens.pop(ip-i)
+                            ip -= 1
+                        ip += closing_index + 1
 
-                if isinstance(arg, Parens):
-                    tokens[ip] = Op(OpType.PRINT, token.loc, arg)
+                if isinstance(arg, Parens): end_tokens.append(Op(OpType.PRINT, token.loc, arg))
                 else:
-                    if (arg.typ != TokenType.STR) and (arg.typ != TokenType.INT):
+                    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT):
                         print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string or number but found `{arg.typ}`")
                         exit(1)
-                    tokens[ip] = Op(OpType.PRINT, token.loc, arg.value)
+                    end_tokens.append(Op(OpType.PRINT, token.loc, arg))
+                #print(f"Pointing token is now: {tokens[ip]}, end of PRINT")
             elif typ == OpType.PLUS:
-                if tokens[0] == token:
+                if ip == 0:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument before the operator but found nothing.")
                     exit(1)
                 if len(tokens[ip:]) == 1:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
                     exit(1)
-                tokens[ip] = Op(OpType.PLUS, token.loc, None)
-    return tokens
+                end_tokens.append(Op(OpType.PLUS, token.loc, None))
+                ip += 1
+            elif typ == OpType.MUL:
+                if ip == 0:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument before the operator but found nothing.")
+                    exit(1)
+                if len(tokens[ip:]) == 1:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
+                    exit(1)
+                end_tokens.append(Op(OpType.MUL, token.loc, None))
+                ip += 1
+        elif token.typ == TokenType.STR or token.typ == TokenType.INT:
+            end_tokens.append(token)
+            ip += 1
+    return end_tokens
 
 def find_token_type(value: str):
     if value in KEYWORDS or value in KEYWORDS_SIGNS:
