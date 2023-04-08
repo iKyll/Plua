@@ -18,9 +18,9 @@ All floatings numbers are automatically FLOAT types but you can cast a Interger 
 ### Arithmetics
 
 In plua there are 3 Arithmetics operators: `+`, `*`, `/`
-The PLUS operator can either add two numbers of the same type or concatenate two strings.
-The MUL operator multiplies two numbers of the same type
-The TRUEDIV operator (`/`) divide the first by the second. The result is always converted to an INT
+The PLUS operator (`+`) can either add two numbers of the same type or concatenate two strings.
+The MUL operator (`*`) multiplies two numbers of the same type
+The TRUEDIV operator (`/`) divide the first by the second. The result is always converted to an FLOAT
 
 ```
 print ( 4 + 5 ) // 9
