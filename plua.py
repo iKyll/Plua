@@ -144,24 +144,39 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if not was_arg: program.insert(placing_ip, Token(arg1.typ, arg2.loc, new_value))
                 else: return Token(arg1.typ, arg2.loc, new_value), used
             elif token.typ == OpType.MUL:
+                if ip == 0:
+                    assert False, f"This could be a bug in either the parser or the inserts placed in the simulation, Current program is: {program}"
+                if ip == 1 or ip == 2:
+                    placing_ip = 0
+                else: placing_ip = ip - 3
                 arg1 = program.pop(ip-1)
                 _    = program.pop(ip-1)
                 arg2 = program.pop(ip-1)
                 used += 3
-                
                 if arg2 == token: 
                     assert False, "ERROR?"
+
+                if arg2.typ in OpType:
+                    program.insert(ip-1, arg2)
+                    result = simulate(program[placing_ip:], was_arg=True, track_usage=True)
+
+                    arg2, usedd = result
+                    for i in range(used): 
+                        if program: program.pop(ip-1)
+                    if not was_arg: used += usedd
+
+                if isinstance(arg2, tuple): arg2 = arg2[0]
                 if arg1.typ != arg2.typ:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `*` operator can only multiply two arguments of the same type but found `{arg1.typ}` and `{arg2.typ}`")
                     exit(1)
-                if arg1.typ != TokenType.INT:
-                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `*` operator can only multiply numbers.")
+                if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `*` operator can only multiply numbers but found type: `{arg1.typ}`")
                     exit(1)
                 new_value = arg1.value * arg2.value
-                if was_arg: return new_value
 
-                ip -= 1
-                program.insert(ip-3, Token(arg1.typ, arg2.loc, new_value))
+                ip -= 2
+                if not was_arg: program.insert(placing_ip, Token(arg1.typ, arg2.loc, new_value))
+                else: return Token(arg1.typ, arg2.loc, new_value), used      
         elif token.typ in TokenType:
             ip += 1 
 
