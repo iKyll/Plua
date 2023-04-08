@@ -208,6 +208,10 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `/` operator can only multiply numbers but found type: `{arg1.typ}`")
                     exit(1)
+
+                if arg1.value == 0 or arg2.value == 0:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `/` operator cannot divide by 0")
+                    exit(1)
                 new_value = arg1.value / arg2.value
 
                 ip -= 2
