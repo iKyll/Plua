@@ -12,11 +12,12 @@ class OpType(Enum):
     PLUS=auto()
     MUL=auto()
     FLOAT=auto()
+    TRUEDIV=auto()
     #LBRACKET=auto()
     #RBRACKET=auto()
 
 SEPARATORS = ['(', ')']
-KEYWORDS_SIGNS = ['+', '*']
+KEYWORDS_SIGNS = ['+', '*', '/']
 KEYWORDS = [ str(typ).split('.')[1].lower() for typ in OpType]
 KEYWORDS_BY_NAME = {
         "print": OpType.PRINT,
@@ -25,10 +26,11 @@ KEYWORDS_BY_NAME = {
         "+": OpType.PLUS,
         "*": OpType.MUL,
         "float": OpType.FLOAT,
+        "/": OpType.TRUEDIV
     }
 assert len(KEYWORDS_BY_NAME) == len(OpType), "Exhaustive handling of ops type in KEYWORDS_BY_NAME"
 assert len(KEYWORDS_SIGNS) == len(OpType) - 4, "Exhaustive handling of keywords signs"
-assert len(SEPARATORS) == len(OpType) - 4, "Exhaustive handling of SEPARATORS"
+assert len(SEPARATORS) == len(OpType) - 5, "Exhaustive handling of SEPARATORS"
 
 @dataclass
 class Op:
@@ -73,7 +75,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
         token = program[ip]
         #print("Executing: ", token.typ, " Program is now: ", program, " Ip is :", ip)
         if token.typ in OpType:
-            assert len(OpType) == 6, "Exhaustive handling of ops in simulate()"
+            assert len(OpType) == 7, "Exhaustive handling of ops in simulate()"
             if token.typ == OpType.PRINT:
                 value = token.value
                 if isinstance(value, Parens):
@@ -176,7 +178,41 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(arg1.typ, arg2.loc, new_value))
-                else: return Token(arg1.typ, arg2.loc, new_value), used      
+                else: return Token(arg1.typ, arg2.loc, new_value), used
+            elif token.typ == OpType.TRUEDIV:
+                if ip == 0:
+                    assert False, f"This could be a bug in either the parser or the inserts placed in the simulation, Current program is: {program}"
+                if ip == 1 or ip == 2:
+                    placing_ip = 0
+                else: placing_ip = ip - 3
+                arg1 = program.pop(ip-1)
+                _    = program.pop(ip-1)
+                arg2 = program.pop(ip-1)
+                used += 3
+                if arg2 == token: 
+                    assert False, "ERROR?"
+
+                if arg2.typ in OpType:
+                    program.insert(ip-1, arg2)
+                    result = simulate(program[placing_ip:], was_arg=True, track_usage=True)
+
+                    arg2, usedd = result
+                    for i in range(used): 
+                        if program: program.pop(ip-1)
+                    if not was_arg: used += usedd
+
+                if isinstance(arg2, tuple): arg2 = arg2[0]
+                if arg1.typ != arg2.typ:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `/` operator can only multiply two arguments of the same type but found `{arg1.typ}` and `{arg2.typ}`")
+                    exit(1)
+                if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `/` operator can only multiply numbers but found type: `{arg1.typ}`")
+                    exit(1)
+                new_value = arg1.value / arg2.value
+
+                ip -= 2
+                if not was_arg: program.insert(placing_ip, Token(TokenType.FLOAT, arg2.loc, new_value))
+                else: return Token(TokenType.FLOAT, arg2.loc, new_value), used
         elif token.typ in TokenType:
             ip += 1 
 
@@ -228,7 +264,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 return Parens(loc, value)
         if token.value in KEYWORDS or token.value in KEYWORDS_SIGNS:
             typ = KEYWORDS_BY_NAME[token.value]
-            assert len(OpType) == 6, "Exhaustive handling of ops in parse_token_as_op()"
+            assert len(OpType) == 7, "Exhaustive handling of ops in parse_token_as_op()"
             if typ == OpType.PRINT:
                 if len(tokens[ip:]) == 1:
                     print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
@@ -278,6 +314,15 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
                     exit(1)
                 end_tokens.append(Op(OpType.MUL, token.loc, None))
+                ip += 1
+            elif typ == OpType.TRUEDIV:
+                if ip == 0:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument before the operator but found nothing.")
+                    exit(1)
+                if len(tokens[ip:]) == 1:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
+                    exit(1)
+                end_tokens.append(Op(OpType.TRUEDIV, token.loc, None))
                 ip += 1
         elif token.typ == TokenType.STR or token.typ == TokenType.INT or token.typ == TokenType.FLOAT:
             end_tokens.append(token)
