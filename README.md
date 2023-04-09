@@ -36,3 +36,9 @@ The syntax to define a variable is:
 def {name} : {type} => {value}
 def number : int => 50
 ```
+
+The syntax to reassign a variable to a new_value is 
+```
+{name} => {new_value}
+number => 100
+```

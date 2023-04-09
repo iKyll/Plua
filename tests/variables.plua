@@ -1,4 +1,7 @@
 def number : int => 50 
 
 print number
-print ( number + 5 )
+
+number => 100
+
+print number
