@@ -110,11 +110,19 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                         print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for print operator: ", value)
                         exit(1)
                     value = value[0].value
+
+                elif (hasattr(value, 'typ') and value.typ == TokenType.WORD):
+                    value = simulate([value], was_arg=True, track_usage=False).value
+                    _ = program.pop(ip)
+
+                elif (hasattr(value, 'typ')):
+                    value = value.value
+                    _ = program.pop(ip)
                 if isinstance(value, str):
                     print(value.encode('latin-1', 'backslashreplace').decode('unicode-escape'))
                 else:
                     print(value)
-                program.pop(ip)
+                _ = program.pop(ip)
                 used += 1
                 if was_arg: return None, 0
                 #ip -= 1 
@@ -302,7 +310,8 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `>` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value > arg1.value else False
+
+                new_value = (arg1.value > arg2.value)
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -336,7 +345,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `<` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value < arg1.value else False
+                new_value = True if arg1.value < arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -370,7 +379,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `>=` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value >= arg1.value else False
+                new_value = True if arg1.value >= arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -404,7 +413,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `<=` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value <= arg1.value else False
+                new_value = True if arg1.value <= arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -435,7 +444,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != arg2.typ:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `==` operator can only return a boolean value if the arguments have the same type but found:  `{arg1.typ}` and `{arg2.typ}`")
                     exit(1)
-                new_value = True if arg2.value == arg1.value else False
+                new_value = True if arg1.value == arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -481,8 +490,11 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if isinstance(program[ip+1], Parens): return simulate(program[ip+1], was_arg=True, track_usage=False)
                 return simulate([program[ip+1]], was_arg=True, track_usage=False)
         elif token.typ == TokenType.WORD:
-            print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: unknown word: `{token.value}`")
-            exit(1)
+            if token.value in Variables:
+                program[ip] =  Variables[token.value]           
+            else:
+                print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: unknown word: `{token.value}`")
+                exit(1)
         elif token.typ in TokenType:
             ip += 1 
 
@@ -526,6 +538,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
     end_tokens = []
     for op in range(len(tokens)):
         if len(tokens) == 0: return end_tokens
+        if ip > len(tokens): return end_tokens
         token = tokens[ip]
         for separator in SEPARATORS:
             if token.value == separator:
@@ -544,23 +557,23 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 closing_index = 0
                 if arg.typ == TokenType.LPAREN:
                     closing_index = find_last_separator(tokens[ip+1:])
-                    arg = parse_token_as_op(tokens[ip+1:closing_index+1])
+                    arg = parse_token_as_op(tokens[ip+1:ip+closing_index+1])
                     if ip == 0:
                         for i in range(closing_index+1): 
                             tokens.pop(0)
                     else:
-                        ip -= 1
                         for i in range(closing_index+1):
-                            tokens.pop(ip-i)
+                            tokens.pop(ip+i)                            
                             ip -= 1
                         ip += closing_index + 1
 
                 if isinstance(arg, Parens): end_tokens.append(Op(OpType.PRINT, token.loc, arg))
                 else:
-                    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT):
-                        print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string or number but found `{arg.typ}`")
+                    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT) and (hasattr(arg, 'typ') and arg.typ != TokenType.WORD):
+                        print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string, number or variable name but found `{arg.typ}`")
                         exit(1)
                     end_tokens.append(Op(OpType.PRINT, token.loc, arg))
+                ip += 1
             elif typ == OpType.FLOAT:
                 if len(tokens[ip:]) == 1:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
