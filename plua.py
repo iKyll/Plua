@@ -19,30 +19,36 @@ class OpType(Enum):
     GE=auto()
     LE=auto()
     EQUAL=auto()
+    DEF=auto()
+    TYPE_EQUAL=auto()
+    EQUAL_ARROW=auto()
     #LBRACKET=auto()
     #RBRACKET=auto()
 
 SEPARATORS = ['(', ')']
-KEYWORDS_SIGNS = ['+', '*', '/', '-', '>', '<', '>=', '<=', '==']
+KEYWORDS_SIGNS = ['+', '*', '/', '-', '>', '<', '>=', '<=', '==', ':', '=>']
 KEYWORDS = [ str(typ).split('.')[1].lower() for typ in OpType]
 KEYWORDS_BY_NAME = {
         "print": OpType.PRINT,
-        "(": OpType.LPAREN,
-        ")": OpType.RPAREN,
-        "+": OpType.PLUS,
-        "*": OpType.MUL,
+        "("    : OpType.LPAREN,
+        ")"    : OpType.RPAREN,
+        "+"    : OpType.PLUS,
+        "*"    : OpType.MUL,
         "float": OpType.FLOAT,
-        "/": OpType.TRUEDIV,
-        "-": OpType.SUB,
-        ">": OpType.GT,
-        "<": OpType.LT,
-        ">=": OpType.GE,
-        "<=": OpType.LE,
-        "==": OpType.EQUAL
+        "/"    : OpType.TRUEDIV,
+        "-"    : OpType.SUB,
+        ">"    : OpType.GT,
+        "<"    : OpType.LT,
+        ">="   : OpType.GE,
+        "<="   : OpType.LE,
+        "=="   : OpType.EQUAL,
+        "def"  : OpType.DEF,
+        ":"    : OpType.TYPE_EQUAL,
+        "=>"   : OpType.EQUAL_ARROW
     }
 assert len(KEYWORDS_BY_NAME) == len(OpType), "Exhaustive handling of ops type in KEYWORDS_BY_NAME"
-assert len(KEYWORDS_SIGNS) == len(OpType) - 4, "Exhaustive handling of keywords signs"
-assert len(SEPARATORS) == len(OpType) - 11, "Exhaustive handling of SEPARATORS"
+assert len(KEYWORDS_SIGNS) == len(OpType) - 5, "Exhaustive handling of keywords signs"
+assert len(SEPARATORS) == len(OpType) - 14, "Exhaustive handling of SEPARATORS"
 
 @dataclass
 class Op:
@@ -52,6 +58,7 @@ class Op:
 
 class TokenType(Enum):
     KEYWORD=auto()
+    WORD=auto()
     LPAREN=auto()
     RPAREN=auto()
     STR=auto()
@@ -71,7 +78,13 @@ class Parens:
     loc: Loc
     ops: Union[Token, Op]
 
+@dataclass
+class Variable:
+    typ: Union[TokenType.INT, TokenType.FLOAT, TokenType.BOOL, TokenType.STR]
+    value: Token
+
 Program = List[Union[Token, Op, Parens]]
+Variables = {}
 
 def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
     in_parens = False
@@ -88,7 +101,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
         token = program[ip]
         #print("Executing: ", token.typ, " Program is now: ", program, " Ip is :", ip)
         if token.typ in OpType:
-            assert len(OpType) == 13, "Exhaustive handling of ops in simulate()"
+            assert len(OpType) == 16, "Exhaustive handling of ops in simulate()"
             if token.typ == OpType.PRINT:
                 value = token.value
                 if isinstance(value, Parens):
@@ -97,11 +110,19 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                         print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for print operator: ", value)
                         exit(1)
                     value = value[0].value
+
+                elif (hasattr(value, 'typ') and value.typ == TokenType.WORD):
+                    value = simulate([value], was_arg=True, track_usage=False).value
+                    _ = program.pop(ip)
+
+                elif (hasattr(value, 'typ')):
+                    value = value.value
+                    _ = program.pop(ip)
                 if isinstance(value, str):
                     print(value.encode('latin-1', 'backslashreplace').decode('unicode-escape'))
                 else:
                     print(value)
-                program.pop(ip)
+                _ = program.pop(ip)
                 used += 1
                 if was_arg: return None, 0
                 #ip -= 1 
@@ -289,7 +310,8 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `>` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value > arg1.value else False
+
+                new_value = (arg1.value > arg2.value)
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -323,7 +345,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `<` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value < arg1.value else False
+                new_value = True if arg1.value < arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -357,7 +379,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `>=` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value >= arg1.value else False
+                new_value = True if arg1.value >= arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -391,7 +413,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != TokenType.INT and arg1.typ != TokenType.FLOAT:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `<=` operator can only checks for numbers but found type: `{arg1.typ}`")
                     exit(1)
-                new_value = True if arg2.value <= arg1.value else False
+                new_value = True if arg1.value <= arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
@@ -422,12 +444,57 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg1.typ != arg2.typ:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `==` operator can only return a boolean value if the arguments have the same type but found:  `{arg1.typ}` and `{arg2.typ}`")
                     exit(1)
-                new_value = True if arg2.value == arg1.value else False
+                new_value = True if arg1.value == arg2.value else False
 
                 ip -= 2
                 if not was_arg: program.insert(placing_ip, Token(TokenType.BOOL, arg2.loc, new_value))
                 else: return Token(TokenType.BOOL, arg2.loc, new_value), used
+            elif token.typ == OpType.DEF:
+                _ = program.pop(ip)
+                name = program.pop(ip)
+                if name.typ != TokenType.WORD:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: trying to name a variable to either a keyword, a number or a boolean value.")
+                    exit(1)
 
+                type_equal = program.pop(ip)
+                if type_equal.typ != OpType.TYPE_EQUAL:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected `:` but found: ", type_equal.value)
+                    exit(1)
+                typ = program.pop(ip)
+                typ = simulate([type_equal, typ], was_arg=True, track_usage=False)
+
+                equal_arrow = program.pop(ip)
+                if equal_arrow.typ != OpType.EQUAL_ARROW:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected `=>` but found: ", type_equal.value)
+                    exit(1)
+                value = program.pop(ip)
+                value = simulate([equal_arrow, value], was_arg=True, track_usage=False)
+    
+                if typ != value.typ:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: mismatched type definition and type of value.")
+                    exit(1)
+                Variables[name.value] = value
+            elif token.typ == OpType.TYPE_EQUAL:
+                if len(program[ip:]) == 1:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument but found nothing.")
+                    exit(1)
+                _ = program.pop(ip)
+                value = program.pop(ip).value
+                if value == 'int': return TokenType.INT
+                elif value == 'float': return TokenType.FLOAT
+                elif value == 'bool': return TokenType.BOOL
+                elif value == 'str': return TokenType.STR
+                print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: given type is not a correct type.")
+                exit(1)
+            elif token.typ == OpType.EQUAL_ARROW:
+                if isinstance(program[ip+1], Parens): return simulate(program[ip+1], was_arg=True, track_usage=False)
+                return simulate([program[ip+1]], was_arg=True, track_usage=False)
+        elif token.typ == TokenType.WORD:
+            if token.value in Variables:
+                program[ip] =  Variables[token.value]           
+            else:
+                print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: unknown word: `{token.value}`")
+                exit(1)
         elif token.typ in TokenType:
             ip += 1 
 
@@ -471,6 +538,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
     end_tokens = []
     for op in range(len(tokens)):
         if len(tokens) == 0: return end_tokens
+        if ip > len(tokens): return end_tokens
         token = tokens[ip]
         for separator in SEPARATORS:
             if token.value == separator:
@@ -479,7 +547,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 return Parens(loc, value)
         if token.value in KEYWORDS or token.value in KEYWORDS_SIGNS:
             typ = KEYWORDS_BY_NAME[token.value]
-            assert len(OpType) == 13, "Exhaustive handling of ops in parse_token_as_op()"
+            assert len(OpType) == 16, "Exhaustive handling of ops in parse_token_as_op()"
             if typ == OpType.PRINT:
                 if len(tokens[ip:]) == 1:
                     print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
@@ -489,23 +557,23 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 closing_index = 0
                 if arg.typ == TokenType.LPAREN:
                     closing_index = find_last_separator(tokens[ip+1:])
-                    arg = parse_token_as_op(tokens[ip+1:closing_index+1])
+                    arg = parse_token_as_op(tokens[ip+1:ip+closing_index+1])
                     if ip == 0:
                         for i in range(closing_index+1): 
                             tokens.pop(0)
                     else:
-                        ip -= 1
                         for i in range(closing_index+1):
-                            tokens.pop(ip-i)
+                            tokens.pop(ip+i)                            
                             ip -= 1
                         ip += closing_index + 1
 
                 if isinstance(arg, Parens): end_tokens.append(Op(OpType.PRINT, token.loc, arg))
                 else:
-                    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT):
-                        print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string or number but found `{arg.typ}`")
+                    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT) and (hasattr(arg, 'typ') and arg.typ != TokenType.WORD):
+                        print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string, number or variable name but found `{arg.typ}`")
                         exit(1)
                     end_tokens.append(Op(OpType.PRINT, token.loc, arg))
+                ip += 1
             elif typ == OpType.FLOAT:
                 if len(tokens[ip:]) == 1:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: expected one argument after the operator but found nothing.")
@@ -593,7 +661,25 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                     exit(1)
                 end_tokens.append(Op(OpType.EQUAL, token.loc, None))
                 ip += 1
-        elif token.typ == TokenType.STR or token.typ == TokenType.INT or token.typ == TokenType.FLOAT or token.typ == TokenType.BOOL:
+            elif typ == OpType.DEF:
+                if len(tokens[ip:]) < 6:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for the variable definition.")
+                    exit(1)
+                end_tokens.append(Op(OpType.DEF, token.loc, None))
+                ip += 1
+            elif typ == OpType.TYPE_EQUAL:
+                if len(tokens[ip:]) == 1:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for the type equal operator.")
+                    exit(1)
+                end_tokens.append(Op(OpType.TYPE_EQUAL, token.loc, None))
+                ip += 1
+            elif typ == OpType.EQUAL_ARROW:
+                if len(tokens[ip:]) == 1:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for the arrow operator.")
+                    exit(1)
+                end_tokens.append(Op(OpType.EQUAL_ARROW, token.loc, None))
+                ip += 1
+        elif token.typ in [TokenType.STR, TokenType.INT, TokenType.FLOAT, TokenType.BOOL, TokenType.WORD]:
             end_tokens.append(token)
             ip += 1
     return end_tokens
@@ -613,8 +699,7 @@ def find_token_type(value: str):
                 float(value)
                 return TokenType.FLOAT
             except ValueError:
-                print("Unknown word: ", value)
-                exit(1)
+                return TokenType.WORD
 
 def find_index(line: str, start, space=True, quotes=False):
     if quotes:
@@ -647,10 +732,8 @@ def lex_line(line: str) -> Tuple[int, TokenType, Union[str, int]]:
             end_word = find_index(line, col+1, space=False)
             value = line[col:end_word]
             typ = find_token_type(value)
-            if typ == TokenType.INT:
-                value = int(value)
-            elif typ == TokenType.FLOAT:
-                value = float(value)
+            if typ == TokenType.INT: value = int(value)
+            elif typ == TokenType.FLOAT: value = float(value)
             yield (col, typ, value)
             col = find_index(line, end_word+1)
 
