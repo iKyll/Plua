@@ -491,7 +491,23 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 return simulate([program[ip+1]], was_arg=True, track_usage=False)
         elif token.typ == TokenType.WORD:
             if token.value in Variables:
-                program[ip] =  Variables[token.value]           
+                if not was_arg and program[ip+1].typ == OpType.EQUAL_ARROW:
+                    if len(program[ip+1:]) == 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for variable reassignation.")
+                        exit(1)
+
+                    value = simulate(program[ip+1:ip+3])
+            
+                    program.pop(ip)
+                    program.pop(ip)
+                    program.pop(ip)
+
+                    if value.typ != Variables[token.value].typ:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: variable reassignation cannot change variable type.")
+                        exit(1)
+                    Variables[token.value] = value
+                else: 
+                    program[ip] = Variables[token.value]           
             else:
                 print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: unknown word: `{token.value}`")
                 exit(1)
