@@ -78,6 +78,9 @@ class Parens:
     loc: Loc
     ops: Union[Token, Op]
 
+    def __len__(self):
+        return len(self.ops)
+
 @dataclass
 class Variable:
     typ: Union[TokenType.INT, TokenType.FLOAT, TokenType.BOOL, TokenType.STR]
@@ -91,13 +94,14 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
     if isinstance(program, Parens):
         program = program.ops
         in_parens = True
-    
+ 
     used = 0
     ip = 0
     while ip < len(program):
     #for op in range(len(program)):
         if len(program) == 0: break
         if ip < 0: ip = 0
+        if isinstance(program, Parens): program = program.ops
         token = program[ip]
         #print("Executing: ", token.typ, " Program is now: ", program, " Ip is :", ip)
         if token.typ in OpType:
@@ -154,6 +158,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg2 == token: 
                     assert False, "ERROR?"
 
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
+
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
                     result = simulate(program[placing_ip:], was_arg=True, track_usage=True)
@@ -162,7 +180,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                     for i in range(used): 
                         if program: program.pop(ip-1)
                     if not was_arg: used += usedd
-
+ 
                 if isinstance(arg2, tuple): arg2 = arg2[0]
                 if arg1.typ != arg2.typ:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: `+` operator can only add two arguments of the same type but found `{arg1.typ}` and `{arg2.typ}`")
@@ -187,6 +205,21 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 used += 3
                 if arg2 == token: 
                     assert False, "ERROR?"
+
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0].value
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0].value
+
 
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
@@ -221,6 +254,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 used += 3
                 if arg2 == token: 
                     assert False, "ERROR?"
+
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
 
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
@@ -260,6 +307,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg2 == token: 
                     assert False, "ERROR?"
 
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
+
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
                     result = simulate(program[placing_ip:], was_arg=True, track_usage=True)
@@ -293,6 +354,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 used += 3
                 if arg2 == token: 
                     assert False, "ERROR?"
+
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
 
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
@@ -329,6 +404,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg2 == token: 
                     assert False, "ERROR?"
 
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
+
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
                     result = simulate(program[placing_ip:], was_arg=True, track_usage=True)
@@ -363,6 +452,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 if arg2 == token: 
                     assert False, "ERROR?"
 
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
+
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
                     result = simulate(program[placing_ip:], was_arg=True, track_usage=True)
@@ -396,6 +499,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 used += 3
                 if arg2 == token: 
                     assert False, "ERROR?"
+    
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
 
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
@@ -430,6 +547,20 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 used += 3
                 if arg2 == token: 
                     assert False, "ERROR?"
+
+                if isinstance(arg1, Parens):
+                    arg1 = simulate(arg1, track_usage=False)
+                    if len(value) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg1)
+                        exit(1)
+                    arg1 = arg1[0]
+
+                if isinstance(arg2, Parens):
+                    arg2 = simulate(arg2, track_usage=False)
+                    if len(arg2) > 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for mul operator: ", arg2)
+                        exit(1)
+                    arg2 = arg2[0]
 
                 if arg2.typ in OpType:
                     program.insert(ip-1, arg2)
@@ -546,7 +677,7 @@ def find_last_separator(program: Program) -> int:
                 return ip + 1 
         ip += 1
     # Find a way to get token's loc
-    print("ERROR: parentheses not closed, missing: ", needed)
+    print(f"ERROR: parentheses not closed, missing: {needed} parentheses")
     exit(1)
 
 def parse_token_as_op(tokens: List[Token]) -> Program:
@@ -554,13 +685,20 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
     end_tokens = []
     for op in range(len(tokens)):
         if len(tokens) == 0: return end_tokens
-        if ip > len(tokens): return end_tokens
+        if ip > len(tokens) - 1: return end_tokens
         token = tokens[ip]
         for separator in SEPARATORS:
             if token.value == separator:
                 loc = token.loc
                 value = parse_token_as_op(tokens[ip+1:-1])
-                return Parens(loc, value)
+                if len(value) == 0: 
+                    ip += 1
+                    continue
+                if end_tokens:
+                    end_tokens.insert(ip, Parens(loc, value))
+                    closing_index = find_last_separator(tokens[ip:])
+                    ip += closing_index + 2
+                else: return Parens(loc, value)
         if token.value in KEYWORDS or token.value in KEYWORDS_SIGNS:
             typ = KEYWORDS_BY_NAME[token.value]
             assert len(OpType) == 16, "Exhaustive handling of ops in parse_token_as_op()"
@@ -568,7 +706,6 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 if len(tokens[ip:]) == 1:
                     print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
                     exit(1)
-                # TODO: find a way to change this pop because it's quite slow
                 arg = tokens[ip+1]
                 closing_index = 0
                 if arg.typ == TokenType.LPAREN:
@@ -579,7 +716,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                             tokens.pop(0)
                     else:
                         for i in range(closing_index+1):
-                            tokens.pop(ip+i)                            
+                            tokens.pop(ip+i)
                             ip -= 1
                         ip += closing_index + 1
 
