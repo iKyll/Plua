@@ -28,3 +28,11 @@ print ( 4 * 5 ) // 20
 print ( 4 / 5 ) // 0.8
 ```
 
+
+### Variables
+
+The syntax to define a variable is:
+```
+def {name} : {type} => {value}
+def number : int => 50
+```
