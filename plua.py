@@ -22,8 +22,12 @@ class OpType(Enum):
     DEF=auto()
     TYPE_EQUAL=auto()
     EQUAL_ARROW=auto()
+    FUNC=auto()
+    END=auto()
     #LBRACKET=auto()
     #RBRACKET=auto()
+
+OpTypes = [ x for x in OpType if x ]
 
 SEPARATORS = ['(', ')']
 KEYWORDS_SIGNS = ['+', '*', '/', '-', '>', '<', '>=', '<=', '==', ':', '=>']
@@ -44,11 +48,13 @@ KEYWORDS_BY_NAME = {
         "=="   : OpType.EQUAL,
         "def"  : OpType.DEF,
         ":"    : OpType.TYPE_EQUAL,
-        "=>"   : OpType.EQUAL_ARROW
+        "=>"   : OpType.EQUAL_ARROW,
+        "func" : OpType.FUNC,
+        "end"  : OpType.END
     }
 assert len(KEYWORDS_BY_NAME) == len(OpType), "Exhaustive handling of ops type in KEYWORDS_BY_NAME"
-assert len(KEYWORDS_SIGNS) == len(OpType) - 5, "Exhaustive handling of keywords signs"
-assert len(SEPARATORS) == len(OpType) - 14, "Exhaustive handling of SEPARATORS"
+assert len(KEYWORDS_SIGNS) == len(OpType) - 7, "Exhaustive handling of keywords signs"
+assert len(SEPARATORS) == len(OpType) - 16, "Exhaustive handling of SEPARATORS"
 
 @dataclass
 class Op:
@@ -66,6 +72,8 @@ class TokenType(Enum):
     FLOAT=auto()
     BOOL=auto()
 
+TokenTypes = [ x for x in TokenType if x ]
+
 @dataclass
 class Token:
     typ: TokenType
@@ -79,7 +87,21 @@ class Parens:
     ops: Union[Token, Op]
 
     def __len__(self):
-        return len(self.ops)
+        length = 0
+        ip = 0
+        op = None
+        while ip < len(self.ops):
+            if op and isinstance(op, Parens): 
+                length += len(Parens)
+                ip += 1
+            op = self.ops[ip]
+            if op.typ == OpType.PRINT: 
+                length += calculate_length_ops(op.value)
+                ip += 1
+            elif op.typ in TokenTypes or op.typ in OpTypes: 
+                ip += 1
+                length += 1
+        return length
 
 @dataclass
 class Variable:
@@ -87,7 +109,11 @@ class Variable:
     value: Token
 
 Program = List[Union[Token, Op, Parens]]
+
 Variables = {}
+
+Functions = {}
+
 
 def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
     in_parens = False
@@ -105,7 +131,7 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
         token = program[ip]
         #print("Executing: ", token.typ, " Program is now: ", program, " Ip is :", ip)
         if token.typ in OpType:
-            assert len(OpType) == 16, "Exhaustive handling of ops in simulate()"
+            assert len(OpType) == 18, "Exhaustive handling of ops in simulate()"
             if token.typ == OpType.PRINT:
                 value = token.value
                 if isinstance(value, Parens):
@@ -117,11 +143,11 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
 
                 elif (hasattr(value, 'typ') and value.typ == TokenType.WORD):
                     value = simulate([value], was_arg=True, track_usage=False).value
+                    print(program)
                     _ = program.pop(ip)
 
                 elif (hasattr(value, 'typ')):
                     value = value.value
-                    _ = program.pop(ip)
                 if isinstance(value, str):
                     print(value.encode('latin-1', 'backslashreplace').decode('unicode-escape'))
                 else:
@@ -620,6 +646,10 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
             elif token.typ == OpType.EQUAL_ARROW:
                 if isinstance(program[ip+1], Parens): return simulate(program[ip+1], was_arg=True, track_usage=False)
                 return simulate([program[ip+1]], was_arg=True, track_usage=False)
+            elif token.typ == OpType.FUNC:
+                assert False, "Parser error?"
+            elif token.typ == OpType.END:
+                assert False, "Parser error?"
         elif token.typ == TokenType.WORD:
             if token.value in Variables:
                 if not was_arg and program[ip+1].typ == OpType.EQUAL_ARROW:
@@ -638,7 +668,13 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                         exit(1)
                     Variables[token.value] = value
                 else: 
-                    program[ip] = Variables[token.value]           
+                    program[ip] = Variables[token.value]
+            elif token.value in Functions:
+                program.pop(ip)
+
+                for i, op in enumerate(Functions[token.value]):
+                    if i == 0: i = ip
+                    program.insert(i, op)
             else:
                 print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: unknown word: `{token.value}`")
                 exit(1)
@@ -680,7 +716,29 @@ def find_last_separator(program: Program) -> int:
     print(f"ERROR: parentheses not closed, missing: {needed} parentheses")
     exit(1)
 
-def parse_token_as_op(tokens: List[Token]) -> Program:
+
+# Token can pass solo as args
+def calculate_length_ops(ops: Program) -> int:
+    if isinstance(ops, Parens): return len(ops)
+    elif isinstance(ops, Token): return 1
+    elif isinstance(ops, Op): return 1
+    length = 0
+    ip = 0
+    op = None
+    while ip < len(ops):
+        if op and isinstance(op, Parens): 
+            length += len(Parens)
+            ip += 1
+        op = ops[ip]
+        if op.typ == OpType.PRINT: 
+            length += calculate_length_ops(op.value) + 1
+            ip += 1
+        elif op.typ in TokenTypes or op.value in KEYWORDS or op.value in KEYWORDS_SIGNS or op.value in SEPARATORS: 
+            ip += 1
+            length += 1
+    return length
+
+def parse_token_as_op(tokens: List[Token], func: bool=False) -> Program:
     ip = 0
     end_tokens = []
     for op in range(len(tokens)):
@@ -701,7 +759,7 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 else: return Parens(loc, value)
         if token.value in KEYWORDS or token.value in KEYWORDS_SIGNS:
             typ = KEYWORDS_BY_NAME[token.value]
-            assert len(OpType) == 16, "Exhaustive handling of ops in parse_token_as_op()"
+            assert len(OpType) == 18, "Exhaustive handling of ops in parse_token_as_op()"
             if typ == OpType.PRINT:
                 if len(tokens[ip:]) == 1:
                     print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
@@ -711,14 +769,8 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                 if arg.typ == TokenType.LPAREN:
                     closing_index = find_last_separator(tokens[ip+1:])
                     arg = parse_token_as_op(tokens[ip+1:ip+closing_index+1])
-                    if ip == 0:
-                        for i in range(closing_index+1): 
-                            tokens.pop(0)
-                    else:
-                        for i in range(closing_index+1):
-                            tokens.pop(ip+i)
-                            ip -= 1
-                        ip += closing_index + 1
+                    ip += closing_index
+                else: ip += 1
 
                 if isinstance(arg, Parens): end_tokens.append(Op(OpType.PRINT, token.loc, arg))
                 else:
@@ -832,6 +884,61 @@ def parse_token_as_op(tokens: List[Token]) -> Program:
                     exit(1)
                 end_tokens.append(Op(OpType.EQUAL_ARROW, token.loc, None))
                 ip += 1
+            elif typ == OpType.FUNC:
+                ops = []
+                i = ip
+                while i < len(tokens):
+                    if tokens[i].typ == TokenType.KEYWORD:
+                        if tokens[i].value == 'end': break
+                    i += 1
+                # Don't forget end keyword
+                i += 1
+
+                if i < 4:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for the func operator.")
+                    exit(1)
+
+                ip += 1 # Skip func operator
+                i -= 1
+
+                name = tokens[ip]
+                if name.typ != TokenType.WORD:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: naming a function with either a keyword, a number or a string is not allowed.")
+                    exit(1)
+                ip += 1 # Skip name
+                i -= 1
+                
+                ops = parse_token_as_op(tokens[ip:ip+i], func=True)
+                length = calculate_length_ops(tokens[ip:ip+i])            
+
+                ip += length
+                i -= length
+                assert i == 0, f"Parser error? : {i}"
+
+
+                # Problem with parentheses when only parens are defined
+                # A print op is working as intended except that the argument is used to be printed and pushed in the program.
+                # So the program complains about unhandled data
+                if isinstance(ops, Parens): 
+                    ops = ops.ops
+                    if tokens[ip-1].typ != OpType.END and tokens[ip-1].value != 'end':
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: function assignation not ended.")
+                        exit(1)
+                    # To bait the pop
+                    ops.append(None)
+                elif ops[-1].typ != OpType.END:
+                    print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: function assignation not ended.")
+                    exit(1)
+                ops.pop()
+                
+
+                # Modify here if function has args
+                Functions[name.value] = ops 
+            elif typ == OpType.END:
+                end_tokens.append(Op(OpType.END, token.loc, "func"))
+                ip += 1
+
+                if func: return end_tokens
         elif token.typ in [TokenType.STR, TokenType.INT, TokenType.FLOAT, TokenType.BOOL, TokenType.WORD]:
             end_tokens.append(token)
             ip += 1
