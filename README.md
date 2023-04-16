@@ -56,4 +56,20 @@ end
 func hello
   print "Hello, World\n"
 end
+
+hello
+```
+
+Here is the syntax to define a function who takes an argument as a paremeter.
+
+```
+func {name} <- ( {name_of_args} )
+  {ops}
+end
+
+func hello <- ( arg )
+  print ( arg + " World\n" )
+end
+
+hello ( "Hello" )
 ```
