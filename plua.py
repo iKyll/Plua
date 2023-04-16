@@ -24,13 +24,14 @@ class OpType(Enum):
     EQUAL_ARROW=auto()
     FUNC=auto()
     END=auto()
+    ARG_ARROW=auto()
     #LBRACKET=auto()
     #RBRACKET=auto()
 
 OpTypes = [ x for x in OpType if x ]
 
 SEPARATORS = ['(', ')']
-KEYWORDS_SIGNS = ['+', '*', '/', '-', '>', '<', '>=', '<=', '==', ':', '=>']
+KEYWORDS_SIGNS = ['+', '*', '/', '-', '>', '<', '>=', '<=', '==', ':', '=>', '<-']
 KEYWORDS = [ str(typ).split('.')[1].lower() for typ in OpType]
 KEYWORDS_BY_NAME = {
         "print": OpType.PRINT,
@@ -50,11 +51,12 @@ KEYWORDS_BY_NAME = {
         ":"    : OpType.TYPE_EQUAL,
         "=>"   : OpType.EQUAL_ARROW,
         "func" : OpType.FUNC,
-        "end"  : OpType.END
+        "end"  : OpType.END,
+        "<-"   : OpType.ARG_ARROW
     }
 assert len(KEYWORDS_BY_NAME) == len(OpType), "Exhaustive handling of ops type in KEYWORDS_BY_NAME"
 assert len(KEYWORDS_SIGNS) == len(OpType) - 7, "Exhaustive handling of keywords signs"
-assert len(SEPARATORS) == len(OpType) - 16, "Exhaustive handling of SEPARATORS"
+assert len(SEPARATORS) == len(OpType) - 17, "Exhaustive handling of SEPARATORS"
 
 @dataclass
 class Op:
@@ -111,15 +113,40 @@ class Variable:
 Program = List[Union[Token, Op, Parens]]
 
 Variables = {}
-
+# List because assignation is just first, second etc. No names are required
+Context_Variables = []
 Functions = {}
 
 
-def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
+def simulate(program: Program, was_arg: bool=False, track_usage: bool=False, in_function: bool=False):
+    global Context_Variables
+
     in_parens = False
     if isinstance(program, Parens):
         program = program.ops
         in_parens = True
+
+    if in_function and len(Context_Variables) > 0:
+        assigned = {}
+        ip = 0
+        if len(program) > 0:
+            for idx, token in enumerate(program):
+                if isinstance(token, Parens):
+                    for jdx, op in enumerate(token.ops):
+                        if op.typ == TokenType.WORD:
+                            if op.value in assigned:
+                                token.ops[jdx] = assigned[op]
+                            elif op.value not in Variables and op.value not in Functions:
+                                assigned = {op.value: Context_Variables[ip]}
+                                token.ops[jdx] = Context_Variables[ip]
+                                ip += 1
+                elif token.typ == TokenType.WORD:
+                    if token.value in assigned:
+                        program[idx] = assigned[token]
+                    elif token.value not in Variables and token.value not in Functions:
+                        assigned = {token.value: Context_Variables[ip]}
+                        program[idx] = Context_Variables[ip]
+                        ip += 1
  
     used = 0
     ip = 0
@@ -131,20 +158,23 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
         token = program[ip]
         #print("Executing: ", token.typ, " Program is now: ", program, " Ip is :", ip)
         if token.typ in OpType:
-            assert len(OpType) == 18, "Exhaustive handling of ops in simulate()"
+            assert len(OpType) == 19, "Exhaustive handling of ops in simulate()"
             if token.typ == OpType.PRINT:
-                value = token.value
+                value = program[ip+1]
+
+                program.pop(ip)
+                program.pop(ip)
+
                 if isinstance(value, Parens):
                     value = simulate(value, track_usage=False)
                     if len(value) > 1:
                         print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: too many arguments for print operator: ", value)
                         exit(1)
-                    value = value[0].value
+                    # Doesn't crash ?
+                    value = value[0].value 
 
                 elif (hasattr(value, 'typ') and value.typ == TokenType.WORD):
-                    value = simulate([value], was_arg=True, track_usage=False).value
-                    print(program)
-                    _ = program.pop(ip)
+                    value = simulate([value], was_arg=True, track_usage=False, in_function=in_function).value
 
                 elif (hasattr(value, 'typ')):
                     value = value.value
@@ -152,10 +182,8 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                     print(value.encode('latin-1', 'backslashreplace').decode('unicode-escape'))
                 else:
                     print(value)
-                _ = program.pop(ip)
                 used += 1
                 if was_arg: return None, 0
-                #ip -= 1 
                 continue
             elif token.typ == OpType.FLOAT:
                 _ = program.pop(ip)
@@ -650,8 +678,13 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 assert False, "Parser error?"
             elif token.typ == OpType.END:
                 assert False, "Parser error?"
+            elif token.typ == OpType.ARG_ARROW:
+                assert False, "Parser error?"
         elif token.typ == TokenType.WORD:
-            if token.value in Variables:
+            if in_function:
+                print(program)
+                exit(1)
+            elif token.value in Variables:
                 if not was_arg and program[ip+1].typ == OpType.EQUAL_ARROW:
                     if len(program[ip+1:]) == 1:
                         print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for variable reassignation.")
@@ -670,11 +703,32 @@ def simulate(program: Program, was_arg: bool=False, track_usage: bool=False):
                 else: 
                     program[ip] = Variables[token.value]
             elif token.value in Functions:
-                program.pop(ip)
+                func = Functions[token.value]
+                if func["args"]:
+                    args_len = len(func["args_name"])
+                    if len(program[ip:]) == 1:
+                        print("%s:%d:%d: ERROR: expected arg for function call but found nothing" % token.loc)
+                        exit(1)
+                    
+                    arg = program[ip+1]
+                    if not isinstance(arg, Parens):
+                        print("%s:%d:%d: ERROR: arguments need to be passed in parentheses for function call" % token.loc)
+                        exit(1)
 
-                for i, op in enumerate(Functions[token.value]):
-                    if i == 0: i = ip
-                    program.insert(i, op)
+                    if args_len < len(arg):
+                        print("%s:%d:%d: ERROR: too many arguments for function call" % token.loc)
+                        exit(1)
+                    elif args_len > len(arg):
+                        print("%s:%d:%d: ERROR: not enough arguments for function call" % token.loc)
+                        exit(1)
+
+                    for v in arg.ops:
+                        Context_Variables.append(v)
+                    simulate(Functions[token.value]["ops"], in_function=True)
+                    Context_Variables = []
+                    program.pop(ip)
+                else: simulate(Functions[token.value]["ops"])
+                program.pop(ip)
             else:
                 print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: unknown word: `{token.value}`")
                 exit(1)
@@ -700,6 +754,7 @@ def find_last_separator(program: Program) -> int:
     if len(program) == 0:
         print("ERROR: find_last_separator had an empty list")
         exit(1)
+    if program[0].typ == TokenType.RPAREN: return 0
     if program[0].typ != TokenType.LPAREN:
         print("ERROR: first argument in find_last_separator need to be a separator")
         exit(1)
@@ -748,36 +803,38 @@ def parse_token_as_op(tokens: List[Token], func: bool=False) -> Program:
         for separator in SEPARATORS:
             if token.value == separator:
                 loc = token.loc
-                value = parse_token_as_op(tokens[ip+1:-1])
+                closing_index = find_last_separator(tokens[ip:])
+                value = parse_token_as_op(tokens[ip+1:ip+closing_index])
                 if len(value) == 0: 
                     ip += 1
                     continue
-                if end_tokens:
-                    end_tokens.insert(ip, Parens(loc, value))
-                    closing_index = find_last_separator(tokens[ip:])
-                    ip += closing_index + 2
-                else: return Parens(loc, value)
+                if tokens[ip:] == 1:
+                    return Parens(loc, value)
+                end_tokens.insert(ip, Parens(loc, value))
+                closing_index = find_last_separator(tokens[ip:])
+                ip += closing_index      
         if token.value in KEYWORDS or token.value in KEYWORDS_SIGNS:
             typ = KEYWORDS_BY_NAME[token.value]
-            assert len(OpType) == 18, "Exhaustive handling of ops in parse_token_as_op()"
+            assert len(OpType) == 19, "Exhaustive handling of ops in parse_token_as_op()"
             if typ == OpType.PRINT:
                 if len(tokens[ip:]) == 1:
-                    print("%s:%d:%d: ERROR: expected argument but found EOF " % token.loc)
+                    print("%s:%d:%d: ERROR: expected argument but found nothing " % token.loc)
                     exit(1)
-                arg = tokens[ip+1]
-                closing_index = 0
-                if arg.typ == TokenType.LPAREN:
-                    closing_index = find_last_separator(tokens[ip+1:])
-                    arg = parse_token_as_op(tokens[ip+1:ip+closing_index+1])
-                    ip += closing_index
-                else: ip += 1
+                #arg = tokens[ip+1]
+                #closing_index = 0
+                #if arg.typ == TokenType.LPAREN:
+                #    closing_index = find_last_separator(tokens[ip+1:])
+                #    arg = parse_token_as_op(tokens[ip+1:ip+closing_index+1])
+                #    ip += closing_index
+                #else: ip += 1
 
-                if isinstance(arg, Parens): end_tokens.append(Op(OpType.PRINT, token.loc, arg))
-                else:
-                    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT) and (hasattr(arg, 'typ') and arg.typ != TokenType.WORD):
-                        print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string, number or variable name but found `{arg.typ}`")
-                        exit(1)
-                    end_tokens.append(Op(OpType.PRINT, token.loc, arg))
+                #if isinstance(arg, Parens): end_tokens.append(Op(OpType.PRINT, token.loc, arg))
+                #else:
+                #    if (hasattr(arg, 'typ') and arg.typ != TokenType.STR) and (hasattr(arg, 'typ') and arg.typ != TokenType.INT) and (hasattr(arg, 'typ') and arg.typ != TokenType.WORD):
+                #        print(f"{arg.loc[0]}:{arg.loc[1]}:{arg.loc[2]}: ERROR: expected string, number or variable name but found `{arg.typ}`")
+                #        exit(1)
+                # Indent this and change `None` to `arg`
+                end_tokens.append(Op(OpType.PRINT, token.loc, None))
                 ip += 1
             elif typ == OpType.FLOAT:
                 if len(tokens[ip:]) == 1:
@@ -907,18 +964,14 @@ def parse_token_as_op(tokens: List[Token], func: bool=False) -> Program:
                     exit(1)
                 ip += 1 # Skip name
                 i -= 1
-                
+            
                 ops = parse_token_as_op(tokens[ip:ip+i], func=True)
-                length = calculate_length_ops(tokens[ip:ip+i])            
+                length = calculate_length_ops(tokens[ip:ip+i])     
 
                 ip += length
                 i -= length
                 assert i == 0, f"Parser error? : {i}"
 
-
-                # Problem with parentheses when only parens are defined
-                # A print op is working as intended except that the argument is used to be printed and pushed in the program.
-                # So the program complains about unhandled data
                 if isinstance(ops, Parens): 
                     ops = ops.ops
                     if tokens[ip-1].typ != OpType.END and tokens[ip-1].value != 'end':
@@ -929,16 +982,61 @@ def parse_token_as_op(tokens: List[Token], func: bool=False) -> Program:
                 elif ops[-1].typ != OpType.END:
                     print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: function assignation not ended.")
                     exit(1)
-                ops.pop()
-                
 
-                # Modify here if function has args
-                Functions[name.value] = ops 
+                argument = False
+                if ops[0].typ == OpType.ARG_ARROW:
+                    argument = True
+                    func_args = []
+                    if not isinstance(ops[1], Parens):
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: wrong argument type")
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: NOTE: functions arguments need to be passed in Parentheses.")
+                        exit(1)
+                    
+                    args = ops[1].ops
+                    if len(ops[1:]) == 1:
+                        print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: not enough arguments for the func operator.")
+                        exit(1)
+
+                    func_ops = ops[2:]
+                    for idx, arg in enumerate(args):
+                        if isinstance(arg, Parens):
+                            print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: wrong argument type")
+                            print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: NOTE: arguments can't be Parens, Keywords, Strings or numbers")
+                            exit(1)
+                        # Modify check to verify passed argument is not func name or variable
+                        elif arg.typ != TokenType.WORD:
+                            print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: wrong argument type")
+                            print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: NOTE: arguments can't be Parens, Keywords, Strings or numbers")
+                            exit(1)
+
+                        found = False
+                        for op in func_ops[:-1]:
+                            if isinstance(op, Parens):
+                                for oop in op.ops:
+                                    if oop.value == arg.value:
+                                        found = True
+                            elif op.value == arg.value:
+                                found = True
+                        if not found:
+                            print(f"{token.loc[0]}:{token.loc[1]}:{token.loc[2]}: ERROR: argument is defined in function but unused.")
+                            exit(1)
+                        func_args.append(arg)
+                        args.pop(idx)
+                    ops = ops[2:]
+                ops.pop()
+        
+                if argument:
+                    Functions[name.value] = { "args": True, "args_name": func_args, "ops": ops } 
+                else:
+                    Functions[name.value] = { "args": False, "ops": ops }
             elif typ == OpType.END:
                 end_tokens.append(Op(OpType.END, token.loc, "func"))
                 ip += 1
 
                 if func: return end_tokens
+            elif typ == OpType.ARG_ARROW:
+                end_tokens.append(Op(OpType.ARG_ARROW, token.loc, "func"))
+                ip += 1
         elif token.typ in [TokenType.STR, TokenType.INT, TokenType.FLOAT, TokenType.BOOL, TokenType.WORD]:
             end_tokens.append(token)
             ip += 1
