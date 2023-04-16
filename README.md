@@ -42,3 +42,34 @@ The syntax to reassign a variable to a new_value is
 {name} => {new_value}
 number => 100
 ```
+
+### Functions
+
+To define a function use the `func` keyword. Then put the function name and all operations after that name will be removed to be put in that function.
+To end a definition of the function use the keyword `end`.
+
+```
+func {name}
+  {ops}
+end
+
+func hello
+  print "Hello, World\n"
+end
+
+hello
+```
+
+Here is the syntax to define a function who takes an argument as a paremeter.
+
+```
+func {name} <- ( {name_of_args} )
+  {ops}
+end
+
+func hello <- ( arg )
+  print ( arg + " World\n" )
+end
+
+hello ( "Hello" )
+```

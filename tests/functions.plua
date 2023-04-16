@@ -1,0 +1,10 @@
+func hello 
+  print "Hello World\n"
+end
+
+func p_arg <- arg1
+  print arg1
+end
+
+hello 
+p_arg 10
